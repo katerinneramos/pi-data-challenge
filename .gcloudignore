@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.git/
+*.pyc
+node_modules/
+# Ignorar documentación
+*.md
+*.pdf
+
+# Ignorar archivos comprimidos
+*.zip
