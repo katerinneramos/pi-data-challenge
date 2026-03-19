@@ -501,15 +501,15 @@ Al final de cada corrida, exitosa o fallida, se inserta un registro en `unificad
 
 ---
 
-## Estructura modular del código fuente
+## Estructura modular
 
-El código está organizado en 4 módulos independientes para facilitar mantenimiento, testeo y revisión:
+El código está organizado en 4 módulos independientes para facilitar mantenimiento y revisión:
 
-### 1. `env_config.py` - Configuración centralizada
+### 1. `env_config.py` - variables de entorno y constantes
 Contiene todas las variables de entorno y constantes del proyecto.
 
 **Propósito:**
-- Single source of truth para PROJECT_ID, DATASET, credenciales, nombres de tablas
+- *Single source of truth* para PROJECT_ID, DATASET, credenciales, nombres de tablas
 - Evita hardcoding de valores en toda la base de código
 
 **Contenido:**
@@ -520,40 +520,31 @@ Contiene todas las variables de entorno y constantes del proyecto.
 - `RAW_TABLE`, `INT_TABLE`, `FINAL_TABLE`, `LOGS_TABLE` - Referencias de tablas
 - `EXPECTED_COLUMNS` - Schema esperado del CSV para validación
 
-**Por qué se usa así:**
-- Cambios de configuración sin tocar lógica de código
-- Facilita deploy en diferentes entornos (dev, staging, prod)
-- Centraliza todo lo que debe venir de variables de entorno
+Facilita deploy en diferentes entornos (dev, staging, prod)
 
 ### 2. `queries.py` - Queries de BigQuery modularizadas
 Contiene funciones que generan queries SQL parametrizadas.
 
 **Funciones:**
-- `get_create_int_table_query(int_table)` - Genera CREATE TABLE para INT
-- `get_merge_int_table_query(int_table, raw_table, ingestion_id, source_file)` - Genera MERGE para INT
-- `get_create_final_table_query(final_table, int_table)` - Genera CREATE OR REPLACE para FINAL
+- `create_int_table_query(int_table)` - *Genera CREATE TABLE para INT*
+- `merge_int_table_query(int_table, raw_table, ingestion_id, source_file)` - *Genera MERGE para INT*
+- `create_final_table_query(final_table, int_table)` - *Genera CREATE OR REPLACE para FINAL*
 
 **Por qué se usa así:**
 - SQL separado del código Python
-- Queries parametrizadas => reutilizable en contextos diferentes
-- Fácil de revisar, versionar y testear SQL sin ejecutar
-- Documentación clara del propósito de cada query
+- Queries parametrizadas >> reutilizable en contextos diferentes
 
-### 3. `data_processing.py` - Lógica medallion architecture
-Contiene las funciones que ejecutan la transformación de datos según el patrón medallion.
+### 3. `data_processing.py` - Lógica de transformación de datos
+Contiene las funciones que ejecutan la transformación de datos.
 
 **Funciones:**
-- `load_to_raw(file_path, ingestion_id)` - Cargf CSV a tabla RAW con validaciones
-- `build_intermediate(ingestion_id, source_file)` - Crea/actualiza tabla INT con tipos y metadatos
-- `build_final()` - Genera tabla FINAL deduplicada
+- `load_to_raw(file_path, ingestion_id)` - *Carga CSV a tabla RAW con validaciones*
+- `build_intermediate(ingestion_id, source_file)` - *Crea/actualiza tabla INT con tipos y metadatos*
+- `build_final()` - *Genera tabla final deduplicada*
 
-**Por qué se usa así:**
-- Agrupa la lógica de transformación en un lugar
-- Usa `env_config` para tablas y `queries` para SQL
-- Cada función es una etapa clara del medallion: RAW >> INT >> FINAL
-- Fácil de testear con datos mock
+Usa `env_config` para tablas y `queries` para SQL
 
-### 4. `main.py` - Orquestador principal
+### 4. `main.py` - Pipeline orquestador
 Contiene la lógica de coordinación del pipeline: validaciones, descarga, y encadenamiento de funciones.
 
 **Funciones principales:**
@@ -561,45 +552,97 @@ Contiene la lógica de coordinación del pipeline: validaciones, descarga, y enc
 - `validate_dataset()` - Verifica que dataset de BigQuery exista
 - `download_csv()` - Descarga el archivo desde URL
 - `upload_to_gcs(file_path, ingestion_id)` - Sube archivo a Cloud Storage
-- `insert_log(...)` - Registra logs de auditoría
-- `main(request=None)` - Orquesta todo el flujo, point of entry para Cloud Function
+- `insert_log(...)` - Registra logs
+- `main()` - Orquesta todo el flujo
 
-**Responsabilidad:**
-- Coordinación del flujo: descarga >> validación >> transformación >> logging
-- Manejo de errores centralizadocon try/except
-- Retorna status HTTP y JSON con métricas
-
-**Por qué se usa así:**
-- Separación de responsabilidades: config, queries, data processing, orquestación
-- `main.py` es legible: está claro el flujo paso por paso
-- Facilita debugging: si algo falla, está claro en qué etapa
-- Preparado para extender: agregar validaciones, loggers, métricas, alertas
+Coordina el flujo: *descarga >> validación >> transformación >> logging*
 
 ### Flujo de dependencias
 
 ```text
 main.py
   │
-  ├─→ import env_config
-  │    (PROJECT_ID, DATASET, BUCKET_NAME, etc)
+  ├─→ import env_config >> (PROJECT_ID, DATASET, BUCKET_NAME, etc)
   │
-  ├─→ import data_processing
-  │    (load_to_raw, build_intermediate, build_final)
+  ├─→ import data_processing >> (load_to_raw, build_intermediate, build_final)
   │
   └─→ data_processing.py
        │
-       ├─→ import env_config
-       │    (RAW_TABLE, INT_TABLE, FINAL_TABLE)
+       ├─→ import env_config >> (RAW_TABLE, INT_TABLE, FINAL_TABLE)
        │
-       └─→ import queries
-            (get_create_int_table_query, get_merge_int_table_query, get_create_final_table_query)
+       └─→ import queries >> (create_int_table_query, merge_int_table_query, create_final_table_query)
 ```
 
-**Ventajas de esta estructura:**
-- **Bajo acoplamiento:** Cada módulo tiene una responsabilidad clara
-- **Alta cohesión:** Datos relacionados viven en el mismo lugar  
-- **Testeable:** Se pueden mockear env vars, queries, componentes de forma independiente
-- **Profesional:** Refleja arquitectura de software enterprise-grade
+De esta manera, cada módulo tiene una responsabilidad clara. El `main.py` es el orquestador, `data_processing.py` la capa de lógica de negocio, `queries.py` la capa de acceso a datos y `env_config.py` la capa de configuración.
+
+---
+
+## Setup
+
+### Estructura de carpetas del proyecto
+
+```
+pi-data-challenge/
+├── README.md                    # Este archivo
+├── requirements.txt             # Librerías Python necesarias
+├── .gitignore
+├── .venv/                       # Virtual environment (no commiteado)
+├── img/                         # Imágenes de documentación
+├── infra/                       # Scripts de infraestructura
+│   ├── config.sh                # Variables de entorno compartidas
+│   ├── dataset_challenge.sh     # Crear dataset en BigQuery
+│   ├── bucket_raw.sh            # Crear bucket en GCS
+│   ├── create_tables.sh         # Crear tablas en BigQuery
+│   ├── scheduler.sh             # Crear job en Cloud Scheduler
+│   ├── load_backup.py           # Carga histórica inicial
+│   └── tables/                  # Scripts SQL para tablas
+│       ├── unificado_raw.sql
+│       ├── unificado_int.sql
+│       ├── unificado.sql
+│       └── unificado_logs.sql
+└── src/                         # Código fuente Python
+    ├── main.py                  # Orquestador principal
+    ├── env_config.py            # Configuración centralizada
+    ├── queries.py               # Queries de BigQuery
+    ├── data_processing.py       # Lógica medallion
+    └── requirements.txt         # Librerías específicas
+```
+
+### Configurar variables de entorno:**
+
+Crear archivo `.env` en la raíz:
+
+```bash
+PROJECT_ID=pi-data-engineer-challenge
+DATASET=challenge_data_engineer
+BUCKET_NAME=pi-data-challenge-bucket
+SOURCE_CSV_URL=https://storagechallengede.blob.core.windows.net/challenge/nuevas_filas%201.csv?...
+```
+
+Cargarlas:
+
+```bash
+export $(cat .env | xargs)
+```
+
+### Mejores prácticas de seguridad
+
+**En Producción:**
+
+1. **Utilizar Secret Manager en lugar de env vars:**
+   ```bash
+   gcloud secrets create SOURCE_CSV_URL --data-file=- <<< "$SOURCE_CSV_URL"
+   # En Cloud Function, cargar desde Secret Manager, no env vars
+   ```
+
+2. **Permisos mínimos en IAM:**
+   - Cloud Function service account: `roles/bigquery.dataEditor`, `roles/storage.objectCreator`
+   - No usar `roles/owner` o permisos innecesarios
+   - Restringir por recurso específico si es posible
+
+3. **Autenticación en Cloud Function:**
+   - Cambiar `--allow-unauthenticated` a `--no-allow-unauthenticated` en producción
+   - Usar Identity-Aware Proxy (IAP) si es necesario
 
 ---
 
@@ -707,7 +750,7 @@ Eso significa:
 
 ---
 
-## Ejecución manual y operación
+## Ejecución manual
 
 ### Ejecutar la Cloud Function manualmente
 ```bash
@@ -773,7 +816,7 @@ ORDER BY fecha_proceso DESC
 LIMIT 10;
 ```
 
-#### Verificar duplicados en FINAL
+#### Verificar duplicados en tabla final
 
 ```sql
 SELECT 
