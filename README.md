@@ -498,6 +498,109 @@ Cada ejecución genera un **UUID**. Esto permite rastrear una corrida puntual, v
 Al final de cada corrida, exitosa o fallida, se inserta un registro en `unificado_logs`.
 
 ![Tabla unificado_logs](img/unificado_log-pi-data-challenge.png)
+
+---
+
+## Estructura modular del código fuente
+
+El código está organizado en 4 módulos independientes para facilitar mantenimiento, testeo y revisión:
+
+### 1. `env_config.py` - Configuración centralizada
+Contiene todas las variables de entorno y constantes del proyecto.
+
+**Propósito:**
+- Single source of truth para PROJECT_ID, DATASET, credenciales, nombres de tablas
+- Evita hardcoding de valores en toda la base de código
+
+**Contenido:**
+- `PROJECT_ID` - Proyecto de GCP (desde env)
+- `DATASET` - Dataset de BigQuery (desde env)
+- `BUCKET_NAME` - Bucket de Cloud Storage (desde env)
+- `SOURCE_CSV_URL` - URL del archivo a descargar (desde env)
+- `RAW_TABLE`, `INT_TABLE`, `FINAL_TABLE`, `LOGS_TABLE` - Referencias de tablas
+- `EXPECTED_COLUMNS` - Schema esperado del CSV para validación
+
+**Por qué se usa así:**
+- Cambios de configuración sin tocar lógica de código
+- Facilita deploy en diferentes entornos (dev, staging, prod)
+- Centraliza todo lo que debe venir de variables de entorno
+
+### 2. `queries.py` - Queries de BigQuery modularizadas
+Contiene funciones que generan queries SQL parametrizadas.
+
+**Funciones:**
+- `get_create_int_table_query(int_table)` - Genera CREATE TABLE para INT
+- `get_merge_int_table_query(int_table, raw_table, ingestion_id, source_file)` - Genera MERGE para INT
+- `get_create_final_table_query(final_table, int_table)` - Genera CREATE OR REPLACE para FINAL
+
+**Por qué se usa así:**
+- SQL separado del código Python
+- Queries parametrizadas => reutilizable en contextos diferentes
+- Fácil de revisar, versionar y testear SQL sin ejecutar
+- Documentación clara del propósito de cada query
+
+### 3. `data_processing.py` - Lógica medallion architecture
+Contiene las funciones que ejecutan la transformación de datos según el patrón medallion.
+
+**Funciones:**
+- `load_to_raw(file_path, ingestion_id)` - Cargf CSV a tabla RAW con validaciones
+- `build_intermediate(ingestion_id, source_file)` - Crea/actualiza tabla INT con tipos y metadatos
+- `build_final()` - Genera tabla FINAL deduplicada
+
+**Por qué se usa así:**
+- Agrupa la lógica de transformación en un lugar
+- Usa `env_config` para tablas y `queries` para SQL
+- Cada función es una etapa clara del medallion: RAW >> INT >> FINAL
+- Fácil de testear con datos mock
+
+### 4. `main.py` - Orquestador principal
+Contiene la lógica de coordinación del pipeline: validaciones, descarga, y encadenamiento de funciones.
+
+**Funciones principales:**
+- `validate_runtime_config()` - Verifica que env vars requeridas existan
+- `validate_dataset()` - Verifica que dataset de BigQuery exista
+- `download_csv()` - Descarga el archivo desde URL
+- `upload_to_gcs(file_path, ingestion_id)` - Sube archivo a Cloud Storage
+- `insert_log(...)` - Registra logs de auditoría
+- `main(request=None)` - Orquesta todo el flujo, point of entry para Cloud Function
+
+**Responsabilidad:**
+- Coordinación del flujo: descarga >> validación >> transformación >> logging
+- Manejo de errores centralizadocon try/except
+- Retorna status HTTP y JSON con métricas
+
+**Por qué se usa así:**
+- Separación de responsabilidades: config, queries, data processing, orquestación
+- `main.py` es legible: está claro el flujo paso por paso
+- Facilita debugging: si algo falla, está claro en qué etapa
+- Preparado para extender: agregar validaciones, loggers, métricas, alertas
+
+### Flujo de dependencias
+
+```text
+main.py
+  │
+  ├─→ import env_config
+  │    (PROJECT_ID, DATASET, BUCKET_NAME, etc)
+  │
+  ├─→ import data_processing
+  │    (load_to_raw, build_intermediate, build_final)
+  │
+  └─→ data_processing.py
+       │
+       ├─→ import env_config
+       │    (RAW_TABLE, INT_TABLE, FINAL_TABLE)
+       │
+       └─→ import queries
+            (get_create_int_table_query, get_merge_int_table_query, get_create_final_table_query)
+```
+
+**Ventajas de esta estructura:**
+- **Bajo acoplamiento:** Cada módulo tiene una responsabilidad clara
+- **Alta cohesión:** Datos relacionados viven en el mismo lugar  
+- **Testeable:** Se pueden mockear env vars, queries, componentes de forma independiente
+- **Profesional:** Refleja arquitectura de software enterprise-grade
+
 ---
 
 ## Deploy paso a paso
