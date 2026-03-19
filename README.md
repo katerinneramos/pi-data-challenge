@@ -2,7 +2,7 @@
 
 ## Resumen del proyecto
 
-Esta solución implementa un pipeline de datos en **Google Cloud Platform** para procesar archivos CSV de datos genómicos y generar tablas finales deduplicadas en **BigQuery**.  
+Esta solución implementa un pipeline de datos en **Google Cloud Platform** para procesar archivos CSV de datos y generar tablas finales deduplicadas en **BigQuery**.  
 El flujo sigue un patrón tipo **Medallion Architecture**: RAW >> INTERMEDIATE >> FINAL, con logs de procesamiento para trazabilidad.
 
 ---
