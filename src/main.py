@@ -11,8 +11,7 @@ import time
 PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET = os.getenv("DATASET")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
-
-URL = "https://storagechallengede.blob.core.windows.net/challenge/nuevas_filas%201.csv?sp=r&st=2026-02-04T14:26:43Z&se=2026-12-31T22:41:43Z&sv=2024-11-04&sr=b&sig=9%2Fnsh4qSw6E6fDkdEx8QLBH7kKlC4szAv2Z%2F%2BmLLF4A%3D"
+SOURCE_CSV_URL = os.getenv("SOURCE_CSV_URL")
 
 # Tablas medallion: raw >> int >> final
 RAW_TABLE = f"{PROJECT_ID}.{DATASET}.unificado_raw"
@@ -35,9 +34,24 @@ def validate_dataset():
     except NotFound:
         raise Exception("El Dataset no existe.")
 
+def validate_runtime_config():
+    missing_vars = []
+
+    if not PROJECT_ID:
+        missing_vars.append("PROJECT_ID")
+    if not DATASET:
+        missing_vars.append("DATASET")
+    if not BUCKET_NAME:
+        missing_vars.append("BUCKET_NAME")
+    if not SOURCE_CSV_URL:
+        missing_vars.append("SOURCE_CSV_URL")
+
+    if missing_vars:
+        raise Exception(f"Faltan variables de entorno requeridas: {', '.join(missing_vars)}")
+
 def download_csv():
     logger.info("Descargando CSV.")
-    response = requests.get(URL, timeout=30)
+    response = requests.get(SOURCE_CSV_URL, timeout=30)
     response.raise_for_status()
 
     if not response.content:
@@ -210,8 +224,8 @@ def build_final():
     """
     logger.info("Create tabla unificado desde unificado_int, removiendo duplicados.")
 
-    count_before = list(bq_client.query(
-        f"SELECT COUNT(*) c FROM `{INT_TABLE}`"
+    raw_total_count = list(bq_client.query(
+        f"SELECT COUNT(*) c FROM `{RAW_TABLE}`"
     ).result())[0].c
 
     query = f"""
@@ -244,17 +258,18 @@ def build_final():
 
     bq_client.query(query).result()
 
-    count_after = list(bq_client.query(
+    final_count = list(bq_client.query(
         f"SELECT COUNT(*) c FROM `{FINAL_TABLE}`"
     ).result())[0].c
-    # Vemos los duplicados removidos
-    row_removed = count_before - count_after
+
+    # Filas del histórico en RAW que quedan removidas por ser duplicados
+    row_removed = raw_total_count - final_count
 
     logger.info(
-        f"Tabla unificado creada: {count_after} registros, "
+        f"Tabla unificado creada: {final_count} registros, "
         f"{row_removed} duplicados removidos"
     )
-    return count_after, row_removed
+    return final_count, row_removed
 
 def insert_log(ingestion_id, raw_count, final_count, row_removed, file_name, gcs_path, status, error=None):
     try:
@@ -289,6 +304,8 @@ def main(request=None):
 
     try:
         logger.info(f"Proyecto: {PROJECT_ID}, Dataset: {DATASET}")
+
+        validate_runtime_config()
 
         validate_dataset()
 

@@ -9,7 +9,7 @@ El flujo sigue un patrón tipo **Medallion Architecture**: RAW >> INTERMEDIATE >
 
 ## Arquitectura de la solución
 
-![Arquitectura GCP](arch-pipeline-pi-data.png)
+![Arquitectura GCP](img/arch-pipeline-pi-data.png)
 
 1. **Cloud Storage (GCS)**  
    - Contiene la archivo CSV en crudo (`raw/`) y registros de ingestión.  
@@ -432,7 +432,7 @@ Cloud Function `main.py`
     ╚═════════════════════════════════════╝
 ```
 
-### Validación del dataset antes de procesar
+## Validación del dataset antes de procesar
 
 Antes de iniciar la carga, la función verifica que el dataset exista. Para evitar que el pipeline siga corriendo si la base no está lista.
 
@@ -497,9 +497,10 @@ Cada ejecución genera un **UUID**. Esto permite rastrear una corrida puntual, v
 
 Al final de cada corrida, exitosa o fallida, se inserta un registro en `unificado_logs`.
 
+![Tabla unificado_logs](img/unificado_log-pi-data-challenge.png)
 ---
 
-## Despliegue paso a paso
+## Deploy paso a paso
 
 ### Requisitos previos
 
@@ -534,14 +535,16 @@ bash infra/dataset_challenge.sh
 ```bash
 bash infra/bucket_raw.sh
 ```
+![Bucket en GCP](img/bucket-pi-data-challenge.png)
 
-### 1Crear tablas en BigQuery
+### Crear tablas en BigQuery
 
 ```bash
 bash infra/create_tables.sh
 ```
+![BigQuery en GCP](img/bigquerytables-pi-data-challenge.png)
 
-### 1Cargar histórico inicial si hace falta
+### Cargar histórico inicial si hace falta
 
 Primero subir el archivo histórico a GCS:
 
@@ -558,17 +561,26 @@ python infra/load_backup.py
 ### Deploy de la Cloud Function
 
 ```bash
+export PROJECT_ID="pi-data-engineer-challenge"
+export DATASET="challenge_data_engineer"
+export BUCKET_NAME="pi-data-challenge-bucket"
+export REGION="us-central1"
+export SOURCE_CSV_URL="https://storagechallengede.blob.core.windows.net/challenge/nuevas_filas%201.csv?sp=r&st=2026-02-04T14:26:43Z&se=2026-12-31T22:41:43Z&sv=2024-11-04&sr=b&sig=9%2Fnsh4qSw6E6fDkdEx8QLBH7kKlC4szAv2Z%2F%2BmLLF4A%3D"
+```
+```bash
 gcloud functions deploy pi-data-challenge-pipeline \
+  --gen2 \
   --runtime python311 \
+  --region "$REGION" \
+  --source=src/ \
+  --entry-point main \
   --trigger-http \
   --allow-unauthenticated \
-  --entry-point main \
-  --region $REGION \
   --memory=512Mi \
-  --set-env-vars PROJECT_ID=$PROJECT_ID,DATASET=$DATASET,BUCKET_NAME=$BUCKET_NAME \
-  --source=src/ \
-  --gen2
+  --set-env-vars PROJECT_ID=$PROJECT_ID,DATASET=$DATASET,BUCKET_NAME=$BUCKET_NAME,SOURCE_CSV_URL="$SOURCE_CSV_URL"
 ```
+![Cloud Function en GCP](img/cloudfunction-pi-data-challenge.png)
+
 ### Crear el Scheduler
 
 ```bash
@@ -588,12 +600,21 @@ Eso significa:
 - todos los lunes,
 - en UTC.
 
+![Cloud Scheduler en GCP](img/cloudscheduler-pi-data-challenge.png)
+
 ---
 
 ## Ejecución manual y operación
 
-### Ejecutar la función manualmente
-
+### Ejecutar la Cloud Function manualmente
+```bash
+curl -X POST "https://pi-data-challenge-pipeline-724141376439.us-central1.run.app" \
+-H "Authorization: bearer $(gcloud auth print-identity-token)" \
+-H "Content-Type: application/json" \
+-d '{
+  "name": "Developer"
+}'
+```
 ```bash
 TRIGGER_URL="https://us-central1-pi-data-engineer-challenge.cloudfunctions.net/pi-data-challenge-pipeline"
 
@@ -602,8 +623,7 @@ curl -X POST "$TRIGGER_URL" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
-
-### Ejecutar el Scheduler manualmente
+### Ejecutar el Cloud Scheduler manualmente
 
 ```bash
 gcloud scheduler jobs run pi-data-challenge-weekly \
@@ -611,7 +631,7 @@ gcloud scheduler jobs run pi-data-challenge-weekly \
   --project=$PROJECT_ID
 ```
 
-### Ver logs de la función
+### Ver logs de la Cloud Function
 
 ```bash
 gcloud functions logs read pi-data-challenge-pipeline \
