@@ -1,8 +1,7 @@
 """
-Data Processing: lógica medallion architecture.
+Data Processing: 
 Transformación de datos: raw >> int >> final
 """
-
 import logging
 import pandas as pd
 from datetime import datetime
@@ -10,14 +9,13 @@ from google.cloud import bigquery
 
 from env_config import RAW_TABLE, INT_TABLE, FINAL_TABLE, EXPECTED_COLUMNS
 from queries import (
-    get_create_int_table_query,
-    get_merge_int_table_query,
-    get_create_final_table_query
+    create_int_table_query,
+    merge_int_table_query,
+    create_final_table_query
 )
 
 logger = logging.getLogger(__name__)
 bq_client = bigquery.Client()
-
 
 def load_to_raw(file_path, ingestion_id):
     """
@@ -34,7 +32,7 @@ def load_to_raw(file_path, ingestion_id):
     df["fecha_copia"] = datetime.utcnow()
 
     # Validaciones de estructura
-    missing_cols = set(EXPECTED_COLUMNS) - set(df.columns)
+    missing_cols = set(EXPECTED_COLUMNS) - set(df.columns) # EXPECTED_COLUMNS viene de env_config.py
     if missing_cols:
         raise Exception(f"Columnas faltantes: {missing_cols}")
     if len(df) == 0:
@@ -56,19 +54,19 @@ def load_to_raw(file_path, ingestion_id):
 
 def build_intermediate(ingestion_id, source_file):
     """
-    Crear tabla INT en base a RAW.
+    Creamos tabla INT en base a RAW.
     - Agregamos: ingestion_id, source_file
-    - Cambio en data_type: pos INT64, qual FLOAT64
+    - Cambio en data type: pos INT64, qual FLOAT64
     - Deduplicación: mantiene un registro por (id, muestra, resultado)
     """
     logger.info("Create tabla unificado_int desde unificado_raw.")
 
     # Crear tabla INT si no existe
-    create_query = get_create_int_table_query(INT_TABLE)
+    create_query = create_int_table_query(INT_TABLE)
     bq_client.query(create_query).result()
 
     # Merge con deduplicación
-    merge_query = get_merge_int_table_query(INT_TABLE, RAW_TABLE, ingestion_id, source_file)
+    merge_query = merge_int_table_query(INT_TABLE, RAW_TABLE, ingestion_id, source_file)
     bq_client.query(merge_query).result()
     
     logger.info(f"Tabla unificado_int actualizada con ingestion_id: {ingestion_id}")
@@ -87,7 +85,7 @@ def build_final():
     ).result())[0].c
 
     # Generar query para tabla FINAL
-    final_query = get_create_final_table_query(FINAL_TABLE, INT_TABLE)
+    final_query = create_final_table_query(FINAL_TABLE, INT_TABLE)
     bq_client.query(final_query).result()
 
     final_count = list(bq_client.query(

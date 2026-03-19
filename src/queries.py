@@ -1,9 +1,7 @@
 """
-Queries SQL moduladas para el pipeline medallion.
+Queries SQL moduladarizadas
 """
-
-
-def get_create_int_table_query(int_table):
+def create_int_table_query(int_table):
     """
     Genera la query para crear la tabla INT si no existe.
     Cambios de tipos: pos INT64, qual FLOAT64
@@ -29,9 +27,7 @@ def get_create_int_table_query(int_table):
     )
     PARTITION BY DATE(fecha_copia)
     """
-
-
-def get_merge_int_table_query(int_table, raw_table, ingestion_id, source_file):
+def merge_int_table_query(int_table, raw_table, ingestion_id, source_file):
     """
     Genera la query para hacer MERGE a la tabla INT.
     - Deduplicación por id + muestra + resultado
@@ -113,9 +109,7 @@ def get_merge_int_table_query(int_table, raw_table, ingestion_id, source_file):
         raw.ingestion_id, raw.source_file
     )
     """
-
-
-def get_create_final_table_query(final_table, int_table):
+def create_final_table_query(final_table, int_table):
     """
     Genera la query para crear la tabla FINAL deduplicada.
     - Mantiene un solo registro por id + muestra + resultado

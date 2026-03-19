@@ -1,7 +1,6 @@
 """
 Configuración de entorno: variables y constantes de infraestructura.
 """
-
 import os
 
 # Variables de entorno requeridas
@@ -18,6 +17,5 @@ LOGS_TABLE = f"{PROJECT_ID}.{DATASET}.unificado_logs"
 
 # Esquema esperado del CSV
 EXPECTED_COLUMNS = [
-    'chrom', 'pos', 'id', 'ref', 'alt', 'qual', 'filter',
-    'info', 'format', 'muestra', 'valor', 'origen', 'resultado'
+    'chrom', 'pos', 'id', 'ref', 'alt', 'qual', 'filter', 'info', 'format', 'muestra', 'valor', 'origen', 'resultado'
 ]

@@ -76,8 +76,7 @@ def upload_to_gcs(file_path, ingestion_id):
 
 def load_to_raw(file_path, ingestion_id):
     """
-    Delegamos a data_processing.load_to_raw.
-    Este wrapper mantiene compatibilidad, pero la lógica está modularizada.
+    Procesamiento en tabla raw ver en: data_processing.py >> load_to_raw
     """
     from data_processing import load_to_raw as dp_load_to_raw
     return dp_load_to_raw(file_path, ingestion_id)
@@ -85,21 +84,17 @@ def load_to_raw(file_path, ingestion_id):
 
 def build_intermediate(ingestion_id, source_file):
     """
-    Delegamos a data_processing.build_intermediate.
-    Este wrapper mantiene compatibilidad, pero la lógica está modularizada.
+    Procesamiento en tabla intermedia ver en: data_processing.py >> build_intermediate
     """
     from data_processing import build_intermediate as dp_build_intermediate
     return dp_build_intermediate(ingestion_id, source_file)
 
-
 def build_final():
     """
-    Delegamos a data_processing.build_final.
-    Este wrapper mantiene compatibilidad, pero la lógica está modularizada.
+    Procesamiento en tabla final ver en: data_processing.py >> build_final
     """
     from data_processing import build_final as dp_build_final
     return dp_build_final()
-
 
 def insert_log(ingestion_id, raw_count, final_count, row_removed, file_name, gcs_path, status, error=None):
     try:
